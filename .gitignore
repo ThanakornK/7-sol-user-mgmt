@@ -1,0 +1,8 @@
+# enviroment
+.env
+
+# process document
+process/*
+
+# MongoDB volume
+.mongodb/*
