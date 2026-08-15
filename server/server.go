@@ -55,11 +55,13 @@ func (s *Server) SetupRoutes() *gin.Engine {
 		auth.POST("/refresh", authHandler.RefreshToken)
 		auth.POST("/logout", authHandler.Logout)
 
+		// Register route should not require authentication
+		v1.POST("/users", userHandler.CreateUser)
 		// User management routes
 		users := v1.Group("/users")
 		users.Use(s.authMiddleware())
 		{
-			users.POST("", userHandler.CreateUser)
+
 			users.GET("/:id", userHandler.GetUserByID)
 			users.GET("", userHandler.GetUserList)
 			users.PATCH("/:id", userHandler.UpdateUser)

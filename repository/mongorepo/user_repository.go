@@ -16,7 +16,17 @@ import (
 
 // userRepository struct implements the UserRepository interface.
 type userRepository struct {
-	db *mongo.Database
+	db         *mongo.Database
+	collection userCollection
+}
+
+type userCollection interface {
+	InsertOne(context.Context, any, ...options.Lister[options.InsertOneOptions]) (*mongo.InsertOneResult, error)
+	FindOne(context.Context, any, ...options.Lister[options.FindOneOptions]) *mongo.SingleResult
+	Find(context.Context, any, ...options.Lister[options.FindOptions]) (*mongo.Cursor, error)
+	CountDocuments(context.Context, any, ...options.Lister[options.CountOptions]) (int64, error)
+	FindOneAndUpdate(context.Context, any, any, ...options.Lister[options.FindOneAndUpdateOptions]) *mongo.SingleResult
+	DeleteOne(context.Context, any, ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error)
 }
 
 // NewUserRepository creates a new UserRepository instance.
@@ -24,11 +34,22 @@ func NewUserRepository(db *mongo.Database) repository.UserRepository {
 	return &userRepository{db: db}
 }
 
+func newUserRepository(collection userCollection) *userRepository {
+	return &userRepository{collection: collection}
+}
+
+func (r *userRepository) users() userCollection {
+	if r.collection != nil {
+		return r.collection
+	}
+	return r.db.Collection("users")
+}
+
 // Create creates a new user in the database.
 func (r *userRepository) Create(ctx context.Context, user *domain.User) (*domain.User, error) {
 	userModel := model.FromUserDomain(user)
 
-	_, err := r.db.Collection("users").InsertOne(ctx, userModel)
+	_, err := r.users().InsertOne(ctx, userModel)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, domain.ErrEmailExists
@@ -42,7 +63,7 @@ func (r *userRepository) Create(ctx context.Context, user *domain.User) (*domain
 // GetByID retrieves a user by ID from the database.
 func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	userModel := &model.User{}
-	err := r.db.Collection("users").FindOne(ctx, bson.M{"_id": id}).Decode(userModel)
+	err := r.users().FindOne(ctx, bson.M{"_id": id}).Decode(userModel)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +74,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 // GetByEmail retrieves a user by email from the database.
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	userModel := &model.User{}
-	err := r.db.Collection("users").FindOne(ctx, bson.M{"email": email}).Decode(userModel)
+	err := r.users().FindOne(ctx, bson.M{"email": email}).Decode(userModel)
 	if err != nil {
 		return nil, err
 	}
@@ -64,14 +85,17 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.
 // GetUserList retrieves a list of users from the database with pagination.
 func (r *userRepository) GetUserList(ctx context.Context, page, pageSize int) ([]*domain.User, utils.Pagination, error) {
 	var users []*model.User
-	cursor, err := r.db.Collection("users").Find(ctx, bson.M{})
+	findOptions := options.Find().
+		SetSkip(int64((page - 1) * pageSize)).
+		SetLimit(int64(pageSize))
+	cursor, err := r.users().Find(ctx, bson.M{}, findOptions)
 	if err != nil {
 		return nil, utils.Pagination{}, err
 	}
 	defer cursor.Close(ctx)
 
 	var total int64
-	total, err = r.db.Collection("users").CountDocuments(ctx, bson.M{})
+	total, err = r.users().CountDocuments(ctx, bson.M{})
 	if err != nil {
 		return nil, utils.Pagination{}, err
 	}
@@ -87,7 +111,9 @@ func (r *userRepository) GetUserList(ctx context.Context, page, pageSize int) ([
 	}
 
 	return domainUsers, utils.Pagination{
-		Total: total,
+		Page:     int64(page),
+		PageSize: int64(pageSize),
+		Total:    total,
 	}, nil
 }
 
@@ -115,8 +141,7 @@ func (r *userRepository) Update(
 
 	var updatedModel model.User
 
-	err := r.db.Collection("users").
-		FindOneAndUpdate(ctx, filter, update, opts).
+	err := r.users().FindOneAndUpdate(ctx, filter, update, opts).
 		Decode(&updatedModel)
 	if err != nil {
 		return nil, err
@@ -127,7 +152,7 @@ func (r *userRepository) Update(
 
 // Delete deletes a user from the database.
 func (r *userRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.Collection("users").DeleteOne(ctx, bson.M{"_id": id})
+	_, err := r.users().DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}

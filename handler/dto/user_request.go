@@ -21,8 +21,8 @@ type UpdateUserRequest struct {
 
 // GetUserListRequest is the request struct for getting a list of users.
 type GetUserListRequest struct {
-	Page     int `json:"page"`
-	PageSize int `json:"pageSize"`
+	Page     int `form:"page"`
+	PageSize int `form:"pageSize"`
 }
 
 // Validate CreateUserRequest manual for custom error message

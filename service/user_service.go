@@ -73,5 +73,11 @@ func (s *userService) Update(ctx context.Context, id string, name *string, email
 
 // Delete deletes a user by ID
 func (s *userService) Delete(ctx context.Context, id string) error {
+	// Check existing user
+	_, err := s.userRepository.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	return s.userRepository.Delete(ctx, id)
 }
