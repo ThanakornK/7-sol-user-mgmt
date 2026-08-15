@@ -1,3 +1,4 @@
+// package dto provides data transfer objects for the application.
 package dto
 
 import (
@@ -5,17 +6,20 @@ import (
 	"user-mgmt/utils"
 )
 
+// CreateUserRequest is the request struct for creating a user.
 type CreateUserRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
+// UpdateUserRequest is the request struct for updating a user.
 type UpdateUserRequest struct {
 	Name  *string `json:"name"`
 	Email *string `json:"email"`
 }
 
+// GetUserListRequest is the request struct for getting a list of users.
 type GetUserListRequest struct {
 	Page     int `json:"page"`
 	PageSize int `json:"pageSize"`
@@ -42,12 +46,16 @@ func (r *CreateUserRequest) Validate() []error {
 		errs = append(errs, errors.New("email is invalid"))
 	}
 
+	// Validate password
 	if r.Password == "" {
 		errs = append(errs, errors.New("password is required"))
+	} else if !utils.IsPasswordValid(r.Password) {
+		errs = append(errs, errors.New("password must contain only letters and numbers and be between 6 and 20 characters"))
 	}
-	return nil
+	return errs
 }
 
+// Validate UpdateUserRequest manual for custom error message
 func (r *UpdateUserRequest) Validate() []error {
 	var errs []error
 	if r.Name != nil {
@@ -63,6 +71,7 @@ func (r *UpdateUserRequest) Validate() []error {
 	return errs
 }
 
+// Validate GetUserListRequest manual for custom error message
 func (r *GetUserListRequest) Validate() []error {
 	var errs []error
 	if r.Page <= 0 {

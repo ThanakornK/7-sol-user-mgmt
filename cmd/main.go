@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,36 +10,44 @@ import (
 	"time"
 	"user-mgmt/config"
 	"user-mgmt/database"
+	"user-mgmt/logger"
 	"user-mgmt/server"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/context"
 )
 
 func main() {
 
+	// Init logger
+	log := logger.New()
+
+	// Load config
 	cfg, err := config.LoadEnv()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatal().Msgf("failed to load config: %v", err)
 	}
 
+	// Create context with cancel for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Init MongoDB
 	mongoClient, err := database.NewMongoDBClient(cfg.MongoDBConfig)
 	if err != nil {
-		log.Fatalf("failed to init MongoDB: %v", err)
+		log.Fatal().Msgf("failed to init MongoDB: %v", err)
 	}
 	defer mongoClient.Disconnect(ctx)
 
 	db := database.GetDatabase(mongoClient, cfg.MongoDBConfig)
+	if err := database.EnsureIndexes(ctx, db); err != nil {
+		log.Fatal().Msgf("failed to ensure database indexes: %v", err)
+	}
 
-	log.Printf("Successfully connected to MongoDB database: %s", cfg.MongoDBConfig.DatabaseName)
+	log.Info().Msgf("Successfully connected to MongoDB database: %s", cfg.MongoDBConfig.DatabaseName)
 
 	gin.SetMode(cfg.Server.GinMode)
 	// Init router
-	srv := server.NewServer(cfg, db)
+	srv := server.NewServer(cfg, db, log)
 	router := srv.SetupRoutes()
 
 	httpServer := &http.Server{
@@ -49,10 +57,11 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
+	// Start server
 	go func() {
-		log.Default().Printf("Starting server on port: %s", cfg.Server.Port)
+		log.Info().Msgf("Starting server on port: %s", cfg.Server.Port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("failed to start server: %v", err)
+			log.Fatal().Msgf("failed to start server: %v", err)
 		}
 	}()
 
@@ -64,8 +73,8 @@ func main() {
 	// Gracefully shutdown server
 	log.Printf("Shutting down server...")
 	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Fatalf("failed to shutdown server: %v", err)
+		log.Fatal().Msgf("failed to shutdown server: %v", err)
 	}
-	log.Printf("Server shutdown successfully")
+	log.Info().Msg("Server shutdown successfully")
 
 }

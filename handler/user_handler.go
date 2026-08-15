@@ -9,14 +9,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// userHandler struct implements the UserHandler interface.
 type userHandler struct {
 	userService service.UserService
 }
 
+// NewUserHandler creates a new UserHandler instance.
 func NewUserHandler(userService service.UserService) *userHandler {
 	return &userHandler{userService: userService}
 }
 
+// CreateUser creates a new user.
 func (h *userHandler) CreateUser(c *gin.Context) {
 	var req dto.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -25,7 +28,7 @@ func (h *userHandler) CreateUser(c *gin.Context) {
 	}
 
 	if errs := req.Validate(); len(errs) > 0 {
-		c.JSON(400, utils.NewErrorResponseStruct("validation failed.", errorMessages(errs)))
+		c.JSON(400, utils.NewErrorResponseStruct("validation failed.", utils.ErrorMessages(errs)))
 		return
 	}
 
@@ -43,6 +46,7 @@ func (h *userHandler) CreateUser(c *gin.Context) {
 	}))
 }
 
+// GetUserByID retrieves a user by ID from the database.
 func (h *userHandler) GetUserByID(c *gin.Context) {
 	id := c.Param("id")
 	if strings.TrimSpace(id) == "" {
@@ -69,6 +73,7 @@ func (h *userHandler) GetUserByID(c *gin.Context) {
 	}))
 }
 
+// GetUserList retrieves a list of users from the database with pagination.
 func (h *userHandler) GetUserList(c *gin.Context) {
 
 	var req dto.GetUserListRequest
@@ -78,7 +83,7 @@ func (h *userHandler) GetUserList(c *gin.Context) {
 	}
 
 	if errs := req.Validate(); len(errs) > 0 {
-		c.JSON(400, utils.NewErrorResponseStruct("validation failed.", errorMessages(errs)))
+		c.JSON(400, utils.NewErrorResponseStruct("validation failed.", utils.ErrorMessages(errs)))
 		return
 	}
 
@@ -107,6 +112,7 @@ func (h *userHandler) GetUserList(c *gin.Context) {
 	}))
 }
 
+// UpdateUser updates a user's name, email in the database by ID.
 func (h *userHandler) UpdateUser(c *gin.Context) {
 	id := c.Param("id")
 	if strings.TrimSpace(id) == "" {
@@ -126,7 +132,7 @@ func (h *userHandler) UpdateUser(c *gin.Context) {
 	}
 
 	if errs := req.Validate(); len(errs) > 0 {
-		c.JSON(400, utils.NewErrorResponseStruct("validation failed.", errorMessages(errs)))
+		c.JSON(400, utils.NewErrorResponseStruct("validation failed.", utils.ErrorMessages(errs)))
 		return
 	}
 
@@ -144,6 +150,7 @@ func (h *userHandler) UpdateUser(c *gin.Context) {
 	}))
 }
 
+// DeleteUser deletes a user from the database by ID.
 func (h *userHandler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
 	if strings.TrimSpace(id) == "" {
@@ -162,12 +169,4 @@ func (h *userHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 	c.JSON(200, utils.NewSuccessResponseStruct("user deleted successfully.", nil))
-}
-
-func errorMessages(errs []error) []string {
-	messages := make([]string, 0, len(errs))
-	for _, err := range errs {
-		messages = append(messages, err.Error())
-	}
-	return messages
 }

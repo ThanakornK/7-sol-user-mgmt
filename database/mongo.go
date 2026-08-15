@@ -7,13 +7,35 @@ import (
 	"time"
 	"user-mgmt/config"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
+// IndexModels returns the index models for users and user sessions. it need to define when initialize the database.
+func IndexModels() (users []mongo.IndexModel, userSessions []mongo.IndexModel) {
+	users = []mongo.IndexModel{{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true)}}
+	userSessions = []mongo.IndexModel{
+		{Keys: bson.D{{Key: "expiresAt", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0)},
+		{Keys: bson.D{{Key: "userId", Value: 1}}},
+	}
+	return users, userSessions
+}
+
+// EnsureIndexes ensures the index models are created in the database.
+func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
+	users, userSessions := IndexModels()
+	if _, err := db.Collection("users").Indexes().CreateMany(ctx, users); err != nil {
+		return err
+	}
+	_, err := db.Collection("user_sessions").Indexes().CreateMany(ctx, userSessions)
+	return err
+}
+
 func NewMongoDBClient(cfg config.MongoDBConfig) (*mongo.Client, error) {
 
+	// Init MongoDB
 	if strings.TrimSpace(cfg.URI) == "" {
 		return nil, errors.New("MONGO_URI must be set")
 	}

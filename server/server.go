@@ -2,9 +2,14 @@
 package server
 
 import (
+	"net/http"
 	"user-mgmt/config"
+	"user-mgmt/handler"
+	"user-mgmt/repository/mongorepo"
+	"user-mgmt/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -12,11 +17,12 @@ import (
 type Server struct {
 	config *config.Config
 	db     *mongo.Database
+	logger zerolog.Logger
 }
 
 // NewServer creates a new server instance
-func NewServer(cfg *config.Config, db *mongo.Database) *Server {
-	return &Server{config: cfg, db: db}
+func NewServer(cfg *config.Config, db *mongo.Database, logger zerolog.Logger) *Server {
+	return &Server{config: cfg, db: db, logger: logger}
 }
 
 // SetupRoutes sets up the routes for the server
@@ -27,38 +33,45 @@ func (s *Server) SetupRoutes() *gin.Engine {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	router.Use(s.corsMiddleware())
+	router.Use(traceMiddleware())
 
-	// Init db
+	// Init repositories
+	userRepository := mongorepo.NewUserRepository(s.db)
+	userSessionRepository := mongorepo.NewUserSessionRepository(s.db)
+
+	// Init services
+	userService := service.NewUserService(userRepository)
+	authService := service.NewAuthService(userRepository, userSessionRepository, &s.config.JWT, s.config.Refresh)
+
+	// Init handlers
+	userHandler := handler.NewUserHandler(userService)
+	authHandler := handler.NewAuthHandler(authService, s.config.Refresh)
 
 	v1 := router.Group("/api/v1")
 	{
-		// auth := v1.Group("/auth")
-		// {
-		// 	// auth.POST("/register", s.register)
-		// 	// auth.POST("/login", s.login)
-		// 	// auth.POST("/refresh", s.refreshToken)
-		// 	// auth.POST("/logout", s.logout)
-		// }
+		// Authentication routes
+		auth := v1.Group("/auth")
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.RefreshToken)
+		auth.POST("/logout", authHandler.Logout)
 
-		// Protected routes (authenticated users)
-		protected := v1.Group("/")
-		protected.Use(s.authMiddleware())
+		// User management routes
+		users := v1.Group("/users")
+		users.Use(s.authMiddleware())
 		{
-			// User routes
-			// userRoute := protected.Group("/user")
-			// {
-			// 	// userRoute.GET("/:id", s.getUser)
-			// 	// userRoute.GET("/", s.getUserList)
-			// 	// userRoute.PATCH("/:id", s.updateUser)
-			// 	// userRoute.DELETE("/:id", s.deleteUser)
-			// }
+			users.POST("", userHandler.CreateUser)
+			users.GET("/:id", userHandler.GetUserByID)
+			users.GET("", userHandler.GetUserList)
+			users.PATCH("/:id", userHandler.UpdateUser)
+			users.DELETE("/:id", userHandler.DeleteUser)
 		}
+
 	}
 
 	// Health routes
 	router.GET("/health", func(c *gin.Context) {
 		// Get host name
-		c.JSON(200, gin.H{"status": "healthy"})
+		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
 	})
 
 	return router
@@ -67,9 +80,15 @@ func (s *Server) SetupRoutes() *gin.Engine {
 // corsMiddleware for CORS frontend in different origin will can call this server API
 func (s *Server) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		origin := c.GetHeader("Origin")
+		if origin != "" && origin == s.config.Server.AllowedOrigin {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+		}
+		c.Header("Vary", "Origin")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Trace-ID")
+		c.Header("Access-Control-Expose-Headers", "X-Trace-ID")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)

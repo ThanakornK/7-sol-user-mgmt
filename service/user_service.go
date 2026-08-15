@@ -6,6 +6,8 @@ import (
 	"user-mgmt/domain"
 	"user-mgmt/repository"
 	"user-mgmt/utils"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // userService implements UserService interface
@@ -23,7 +25,10 @@ func (s *userService) Create(ctx context.Context, email, name, password string) 
 	// Check duplicate email exists
 	_, err := s.userRepository.GetByEmail(ctx, email)
 	if err == nil {
-		return nil, errors.New("email already exists.")
+		return nil, domain.ErrEmailExists
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, err
 	}
 
 	// Hash password
@@ -48,7 +53,7 @@ func (s *userService) GetUserList(ctx context.Context, page, pageSize int) ([]*d
 }
 
 // Update updates a user's email and name
-func (s *userService) Update(ctx context.Context, id string, email *string, name *string) (*domain.User, error) {
+func (s *userService) Update(ctx context.Context, id string, name *string, email *string) (*domain.User, error) {
 	// Check existing user
 	existingUser, err := s.userRepository.GetByID(ctx, id)
 	if err != nil {

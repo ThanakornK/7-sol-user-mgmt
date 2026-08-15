@@ -14,25 +14,32 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// userRepository struct implements the UserRepository interface.
 type userRepository struct {
 	db *mongo.Database
 }
 
+// NewUserRepository creates a new UserRepository instance.
 func NewUserRepository(db *mongo.Database) repository.UserRepository {
 	return &userRepository{db: db}
 }
 
+// Create creates a new user in the database.
 func (r *userRepository) Create(ctx context.Context, user *domain.User) (*domain.User, error) {
 	userModel := model.FromUserDomain(user)
 
 	_, err := r.db.Collection("users").InsertOne(ctx, userModel)
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, domain.ErrEmailExists
+		}
 		return nil, err
 	}
 
 	return user, nil
 }
 
+// GetByID retrieves a user by ID from the database.
 func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	userModel := &model.User{}
 	err := r.db.Collection("users").FindOne(ctx, bson.M{"_id": id}).Decode(userModel)
@@ -43,6 +50,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 	return userModel.ToDomain(), nil
 }
 
+// GetByEmail retrieves a user by email from the database.
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	userModel := &model.User{}
 	err := r.db.Collection("users").FindOne(ctx, bson.M{"email": email}).Decode(userModel)
@@ -53,6 +61,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	return userModel.ToDomain(), nil
 }
 
+// GetUserList retrieves a list of users from the database with pagination.
 func (r *userRepository) GetUserList(ctx context.Context, page, pageSize int) ([]*domain.User, utils.Pagination, error) {
 	var users []*model.User
 	cursor, err := r.db.Collection("users").Find(ctx, bson.M{})
@@ -82,6 +91,7 @@ func (r *userRepository) GetUserList(ctx context.Context, page, pageSize int) ([
 	}, nil
 }
 
+// Update updates a user in the database.
 func (r *userRepository) Update(
 	ctx context.Context,
 	user *domain.User,
@@ -89,7 +99,7 @@ func (r *userRepository) Update(
 	now := time.Now().UTC()
 
 	filter := bson.M{
-		"_id": user.ID,
+		"_id": user.ID.String(),
 	}
 
 	update := bson.M{
@@ -115,6 +125,7 @@ func (r *userRepository) Update(
 	return updatedModel.ToDomain(), nil
 }
 
+// Delete deletes a user from the database.
 func (r *userRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.Collection("users").DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {

@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"time"
 	"user-mgmt/domain"
 	"user-mgmt/utils"
 )
@@ -15,4 +16,13 @@ type UserRepository interface {
 	GetUserList(ctx context.Context, page, pageSize int) ([]*domain.User, utils.Pagination, error)
 	Update(ctx context.Context, user *domain.User) (*domain.User, error)
 	Delete(ctx context.Context, id string) error
+}
+
+// UserSessionRepository interface for user session repository
+type UserSessionRepository interface {
+	Create(ctx context.Context, session *domain.UserSession) error
+	GetByID(ctx context.Context, id string) (*domain.UserSession, error)
+	Rotate(ctx context.Context, id, currentHash, nextHash string, usedAt time.Time) error
+	Revoke(ctx context.Context, id string, revokedAt time.Time) error
+	RevokeAllByUserID(ctx context.Context, userID string, revokedAt time.Time) error
 }

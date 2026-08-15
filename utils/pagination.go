@@ -2,12 +2,14 @@ package utils
 
 import "strconv"
 
+// Pagination struct for pagination.
 type Pagination struct {
 	Page     int64
 	PageSize int64
 	Total    int64
 }
 
+// ParsePagination parses pagination string to pagination.
 func ParsePagination(pageStr, pageSizeStr string) (Pagination, error) {
 	if pageStr == "" {
 		pageStr = "1"
